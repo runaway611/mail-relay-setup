@@ -126,9 +126,15 @@ sin necesitar su propia IP pública ni abrir puertos hacia internet.
 ```
 docker/
   srv-wb/docker-compose.yml
+  srv-wb/fail2ban-jail.cf
   oracle-roundcube/docker-compose.yml
+  daemon.json
 nginx/
   mail.example.com.conf
+  conf.d/rate-limit.conf
+fail2ban/
+  roundcube-auth.conf
+  mail.local
 systemd/
   oracle-socks-proxy.service
   tailscaled-override.conf
@@ -182,6 +188,65 @@ Override del servicio `tailscaled` que configura `HTTPS_PROXY`/`HTTP_PROXY` apun
 SOCKS5 anterior, pero solo para el dominio de control de Tailscale — la lista `NO_PROXY` excluye
 explícitamente todos los relés DERP públicos de Tailscale (para que esos sigan yendo directo,
 sin pasar por el túnel SSH, que no soporta el protocolo DERP).
+
+### `nginx/conf.d/rate-limit.conf` + `limit_req` en `nginx/mail.example.com.conf`
+
+Límite de tasa por IP sobre el login del webmail (`1r/s`, ráfaga de 20, con `429` como respuesta).
+Es la primera línea de defensa contra fuerza bruta: no distingue usuario legítimo de atacante,
+simplemente limita cuántas peticiones por segundo acepta una IP — barato de mantener y no depende
+de parsear logs de aplicación.
+
+### `docker/daemon.json`
+
+Desactiva el **userland-proxy** de Docker (`"userland-proxy": false`) — necesario en **ambas**
+máquinas. Por defecto, cuando un contenedor publica un puerto ligado a una IP específica (como
+hace este setup, ver más abajo), Docker no solo hace NAT vía `iptables`: además levanta un proceso
+`docker-proxy` que acepta la conexión externa y abre una *segunda* conexión propia hacia el
+contenedor. El contenedor nunca ve al cliente real — ve al `docker-proxy`, cuyo origen es la IP
+del gateway del bridge de Docker. Esto rompe cualquier cosa que dependa de la IP real del cliente:
+filtrado por IP, geolocalización, y sobre todo **fail2ban**, que terminaría baneando la puerta de
+enlace de Docker en vez del atacante (ver la nota de `fail2ban-jail.cf` más abajo). Con
+`userland-proxy` desactivado, Docker usa únicamente reglas de `iptables` (DNAT vía conntrack), que
+sí preservan la IP de origen real de principio a fin. Requiere reiniciar el daemon
+(`systemctl restart docker`) para aplicarse — reinicia todos los contenedores del host, no solo
+los de este proyecto.
+
+Nota: esto **no** resuelve el caso de nginx (en Oracle) hablando con Roundcube por
+`127.0.0.1:8080` — ahí el "cliente" es el propio host conectándose a su loopback, un hairpin NAT
+que Docker necesita enmascarar sí o sí para que el enrutamiento de vuelta funcione, sin relación
+con el userland-proxy. Por eso el filtro de `fail2ban/roundcube-auth.conf` no usa la IP de origen
+de la conexión TCP, sino la cabecera `X-Real-IP` que nginx ya venía agregando.
+
+### `docker/srv-wb/fail2ban-jail.cf`
+
+Override de `fail2ban` para `docker-mailserver`, con una lista de `ignoreip` que nunca debe
+banearse: el rango de bridges de Docker (`172.16.0.0/12`) y, más importante, **todo el rango CGNAT
+de Tailscale (`100.64.0.0/10`)**. La razón: todas las conexiones de correo y todas las conexiones
+IMAP que hace Roundcube en nombre de los usuarios del webmail llegan desde la misma IP de
+Tailscale del relay. Sin este `ignoreip`, unos pocos logins fallidos de *cualquier* usuario del
+webmail (típicamente 5-10 en el `bantime`/`findtime` por defecto de varios días de
+`docker-mailserver`) terminan baneando esa IP — lo que corta el correo y el webmail para *todos*
+los usuarios a la vez, no solo para quien se equivocó de contraseña. La defensa real contra fuerza
+bruta tiene que vivir en el borde (el relay, que sí distingue IPs de clientes reales), no en el
+servidor local, que solo ve un único origen confiable por diseño.
+
+### `fail2ban/mail.local` + `fail2ban/roundcube-auth.conf`
+
+Jails de fail2ban para la VM de Oracle (no vienen instalados por defecto):
+
+- **`postfix`**: banea IPs que intentan usar el relay para reenviar correo a dominios externos
+  (`relay access denied`) o que generan rechazos repetidos — backend `systemd`, porque estas
+  instancias no traen `rsyslog`/`/var/log/mail.log`, Postfix loguea directo a `journald`.
+- **`roundcube-auth`**: banea fuerza bruta contra el login del webmail. El filtro no usa el campo
+  `from` del log de Roundcube (que muestra la IP del gateway de Docker por el hairpin NAT
+  explicado arriba), sino el valor de `X-Real-IP` que Roundcube registra entre paréntesis. Requiere
+  que Roundcube tenga `log_driver = 'file'` y `log_logins = true` en su `config.inc.php` (por
+  defecto viene en `stdout` y sin loguear intentos de login), y que el volumen `./logs` esté
+  montado (ver `docker/oracle-roundcube/docker-compose.yml`).
+
+Importante: Ubuntu trae por defecto `/etc/fail2ban/jail.d/defaults-debian.conf` con
+`backend = systemd` como valor global — sin `backend = auto` explícito en `[roundcube-auth]`, el
+jail intenta leer del *journal* en vez del archivo de log de Roundcube y nunca detecta nada.
 
 ---
 

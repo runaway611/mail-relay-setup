@@ -1,0 +1,26 @@
+# Colocar en /etc/fail2ban/jail.d/ en la VM de Oracle (el relay).
+#
+# `backend = auto` en [roundcube-auth] es necesario porque las imágenes de
+# Ubuntu traen /etc/fail2ban/jail.d/defaults-debian.conf con
+# `backend = systemd` como default GLOBAL (porque muchas de estas instancias
+# no tienen rsyslog, y todo se loguea a journald). Sin este override, el
+# jail intenta leer el login fallido desde el journal en vez del archivo de
+# log de Roundcube, y nunca detecta nada.
+
+[DEFAULT]
+bantime  = 3600
+findtime = 600
+maxretry = 5
+
+[postfix]
+enabled      = true
+backend      = systemd
+journalmatch = _SYSTEMD_UNIT=postfix@-.service
+
+[roundcube-auth]
+enabled  = true
+backend  = auto
+port     = http,https
+filter   = roundcube-auth
+logpath  = /home/ubuntu/roundcube/logs/userlogins.log
+maxretry = 5

@@ -1,0 +1,21 @@
+# Colocar en docker-data/dms/config/fail2ban-jail.cf (junto al docker-compose.yml
+# de srv-wb). docker-mailserver copia este archivo a
+# /etc/fail2ban/jail.d/user-jail.local al arrancar el contenedor — solo en el
+# primer arranque o al recrearlo (`docker compose up -d --force-recreate`),
+# no en un simple `restart`.
+
+[DEFAULT]
+# 172.16.0.0/12 cubre las redes de bridge de Docker (172.17.0.0/16, 172.18.0.0/16, ...):
+# nunca debe banearse, es infraestructura interna, no un cliente real.
+#
+# 100.64.0.0/10 es el rango CGNAT de Tailscale. Los puertos publicados aquí
+# solo son alcanzables desde dentro del tailnet (bind a la IP de Tailscale,
+# no a 0.0.0.0), así que cualquier IP de ese rango ya pasó el control de
+# acceso de Tailscale antes de llegar aquí. En particular, el relay de
+# Oracle (único origen real de tráfico de correo y de las conexiones IMAP
+# que hace Roundcube en nombre de todos los usuarios del webmail) usa una
+# IP de este rango — si se banea, se rompe el correo y el webmail para
+# TODOS los usuarios, no solo para quien falló el login. La protección
+# contra fuerza bruta real vive en el borde (fail2ban en el propio relay,
+# que sí ve la IP del atacante real), no aquí.
+ignoreip = 127.0.0.1/8 ::1 172.16.0.0/12 100.64.0.0/10

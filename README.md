@@ -16,9 +16,15 @@ La guía completa, paso a paso, está en [`setup-correo-relay-tailscale.md`](./s
 ```
 docker/
   srv-wb/docker-compose.yml           # docker-mailserver (servidor local)
+  srv-wb/fail2ban-jail.cf             # whitelist de fail2ban (nunca banear al relay/Docker)
   oracle-roundcube/docker-compose.yml # Roundcube (relay)
+  daemon.json                         # desactiva el userland-proxy de Docker (ambas máquinas)
 nginx/
-  mail.example.com.conf               # proxy nginx + Certbot para el webmail
+  mail.example.com.conf               # proxy nginx + Certbot + rate-limit para el webmail
+  conf.d/rate-limit.conf              # zona de rate-limit (login del webmail)
+fail2ban/
+  roundcube-auth.conf                 # filtro: fuerza bruta contra el login de Roundcube
+  mail.local                          # jails de fail2ban para la VM de Oracle (postfix + roundcube)
 systemd/
   oracle-socks-proxy.service          # túnel SOCKS5 (workaround de red, ver Fase 1.4 del setup)
   tailscaled-override.conf            # override de tailscaled para usar el proxy solo en el control-plane

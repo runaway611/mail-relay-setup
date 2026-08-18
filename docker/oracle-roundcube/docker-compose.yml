@@ -15,3 +15,4 @@ services:
     volumes:
       - ./db:/var/roundcube/db
       - ./config:/var/www/html/config   # OJO: no /var/roundcube/config (ver nota en setup.md)
+      - ./logs:/var/www/html/logs       # necesario para que fail2ban (en el host) pueda leer los logins fallidos
