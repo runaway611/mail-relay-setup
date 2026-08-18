@@ -1,0 +1,22 @@
+services:
+  mailserver:
+    image: docker.io/mailserver/docker-mailserver:latest
+    container_name: mailserver
+    hostname: srv-wb.mail.example.com  # NO usar el mismo hostname que el relay (ver setup.md, Fase 4.2)
+    ports:
+      - "<IP_TAILSCALE_SRV-WB>:25:25"    # SMTP, recibe reenvio desde el relay
+      - "<IP_TAILSCALE_SRV-WB>:143:143"  # IMAP
+      - "<IP_TAILSCALE_SRV-WB>:993:993"  # IMAPS
+    volumes:
+      - ./docker-data/dms/mail-data:/var/mail
+      - ./docker-data/dms/mail-state:/var/mail-state
+      - ./docker-data/dms/config:/tmp/docker-mailserver
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - ENABLE_CLAMAV=0          # desactivado: no hay RAM de sobra ni es critico para solo-recepcion
+      - ENABLE_SPAMASSASSIN=1
+      - ENABLE_FAIL2BAN=1
+      - SSL_TYPE=self-signed
+      - PERMIT_DOCKER=network
+      - ONE_DIR=1
+    restart: unless-stopped

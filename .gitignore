@@ -1,0 +1,11 @@
+# Nunca subir datos reales de la instancia en producción
+docker-data/
+mail-data/
+mail-state/
+*.pem
+*.key
+*-accounts.cf
+*-masters.cf
+recipient-bcc-map*
+credenciales*.txt
+.env

@@ -1,0 +1,17 @@
+services:
+  roundcube:
+    image: roundcube/roundcubemail:latest
+    container_name: roundcube
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"    # solo local; nginx hace de proxy publico
+    environment:
+      - ROUNDCUBEMAIL_DEFAULT_HOST=ssl://<IP_TAILSCALE_SRV-WB>   # IMAPS, no el puerto 143 en plano
+      - ROUNDCUBEMAIL_DEFAULT_PORT=993
+      - ROUNDCUBEMAIL_SMTP_SERVER=ssl://<IP_TAILSCALE_SRV-WB>
+      - ROUNDCUBEMAIL_SMTP_PORT=465
+      - ROUNDCUBEMAIL_DB_TYPE=sqlite
+      - ROUNDCUBEMAIL_SKIN=elastic
+    volumes:
+      - ./db:/var/roundcube/db
+      - ./config:/var/www/html/config   # OJO: no /var/roundcube/config (ver nota en setup.md)

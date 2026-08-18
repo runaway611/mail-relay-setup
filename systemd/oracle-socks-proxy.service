@@ -1,0 +1,19 @@
+[Unit]
+Description=SSH SOCKS5 proxy to Oracle relay (bypass local router TLS interception for Tailscale control-plane)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=<usuario-local>
+ExecStart=/usr/bin/ssh -i "<ruta-a-tu-llave-privada>" -D 127.0.0.1:1080 -N \
+  -o ExitOnForwardFailure=yes \
+  -o ServerAliveInterval=15 \
+  -o ServerAliveCountMax=3 \
+  -o StrictHostKeyChecking=accept-new \
+  ubuntu@<IP_PUBLICA_ORACLE>
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
